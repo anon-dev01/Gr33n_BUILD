@@ -1,5 +1,5 @@
 /**
- *Submitted BUILD v2 for verification at Etherscan.io on 2022-08-21
+ *Submitted for verification at Etherscan.io on 2022-08-13
 */
 
 /**
@@ -75,9 +75,8 @@ contract Gr33n is ERC20, Ownable {
         IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
     bool private tradingOpen = false;
     bool public greenWallActive = false;
-    bool private greenWallEnabled = false;
     uint256 private launchBlock = 0;
-    uint256 private sniperProtectBlock = 12;
+    uint256 private sniperProtectBlock = 0;
     address private uniswapV2Pair;
 
     mapping(address => bool) private automatedMarketMakerPairs;
@@ -93,31 +92,30 @@ contract Gr33n is ERC20, Ownable {
     uint256 private baseSellTax = 2;
     uint256 private buyRewards = 3;
     uint256 private sellRewards = 3;
-    uint256 private greenWallJeetTax;
+    uint256 public greenWallJeetTax;
 
-    uint256 private autoLP = 25;
-    uint256 private devFee = 30;
-    uint256 private teamFee = 30;
-    uint256 private buybackFee = 15;
+    uint256 public buyTax = baseBuyTax.add(buyRewards);
+    uint256 public sellTax = baseSellTax.add(sellRewards);
+
+    uint256 private autoLP = 30;
+    uint256 private devFee = 35;
+    uint256 private teamFee = 35;
 
     uint256 private minContractTokensToSwap = 2e9 * 10**_decimals;
-    uint256 public minBuyWallIncludeAmount = 100000000 * 10**_decimals;
-    uint256 public minBuyWallActivationCount = 18;
+    uint256 public minBuyWallIncludeAmount = 1000000000 * 10**_decimals;
+    uint256 public minBuyWallActivationCount = 10;
 
     BuyWallMapping public buyWallMap;
 
     address private devWalletAddress;
     address private teamWalletAddress;
-    address private buyBackWalletAddress;
 
     Gr33nDividendTracker public dividendTracker;
     Gr33nDividendTracker private greenWallDivTracker;
 
     uint256 public pendingTokensForReward;
 
-    uint256 private pendingEthReward;
-
-    uint256 public totalETHRewardsPaidOut;
+    uint256 public pendingEthReward;
 
     struct GreenWallWins {
         address divTrackerWin;
@@ -134,7 +132,7 @@ contract Gr33n is ERC20, Ownable {
     event AddLiquidity(uint256 amountTokens, uint256 amountEth);
     event SwapTokensForEth(uint256 sentTokens, uint256 receivedEth);
     event SwapEthForTokens(uint256 sentEth, uint256 receivedTokens);
-    event DistributeFees(uint256 devEth, uint256 remarketingEth, uint256 rebuybackFees);
+    event DistributeFees(uint256 devEth, uint256 remarketingEth);
 
     event SendBuyWallDividends(uint256 amount);
 
@@ -142,14 +140,12 @@ contract Gr33n is ERC20, Ownable {
 
     constructor(
         address _devWalletAddress,
-        address _teamWalletAddress,
-        address _buyBackWalletAddress
+        address _teamWalletAddress
     ) ERC20(_name, _symbol) {
         devWalletAddress = _devWalletAddress;
         teamWalletAddress = _teamWalletAddress;
-        buyBackWalletAddress = _buyBackWalletAddress;
 
-        maxWalletAmount = (_tTotal * 1) / 10000; // 0.01% maxWalletAmount (initial limit)
+        maxWalletAmount = (_tTotal * 5) / 10000; // 0.05% maxWalletAmount (initial limit)
 
         buyWallMap = new BuyWallMapping();
 
@@ -163,13 +159,11 @@ contract Gr33n is ERC20, Ownable {
         isExcludeFromFee[address(this)] = true;
         isExcludeFromFee[devWalletAddress] = true;
         isExcludeFromFee[teamWalletAddress] = true;
-        isExcludeFromFee[buyBackWalletAddress] = true;
         isExcludeFromMaxWalletAmount[owner()] = true;
         isExcludeFromMaxWalletAmount[address(this)] = true;
         isExcludeFromMaxWalletAmount[address(uniswapV2Router)] = true;
         isExcludeFromMaxWalletAmount[devWalletAddress] = true;
         isExcludeFromMaxWalletAmount[teamWalletAddress] = true;
-        isExcludeFromMaxWalletAmount[buyBackWalletAddress] = true;
         canClaimUnclaimed[owner()] = true;
         canClaimUnclaimed[address(this)] = true;
 
@@ -210,7 +204,7 @@ contract Gr33n is ERC20, Ownable {
         IERC20(_tokenAddr).transfer(_to, _amount);
     }
 
-    function setSniperProtect() external onlyOwner {
+    function openTrading() external onlyOwner {
         require(!tradingOpen, "TOP1");
         uint256 _launchTime;
         
@@ -234,6 +228,11 @@ contract Gr33n is ERC20, Ownable {
         launchBlock = block.number;
     }
 
+    function setSniperProtect(uint256 numberofblocks, uint256 _sniperTax) external onlyOwner {
+        sniperProtectBlock = numberofblocks;
+        sniperTax = _sniperTax;
+    }
+
     function manualSwap() external {
         require(canClaimUnclaimed[msg.sender], "UTC");
         uint256 totalTokens = balanceOf(address(this)).sub(
@@ -253,14 +252,11 @@ contract Gr33n is ERC20, Ownable {
         uint256 teamFeesToSend = totalEth.mul(teamFee).div(
             uint256(100).sub(autoLP)
         );
-        uint256 buybackFeesToSend = totalEth.mul(buybackFee).div(
-            uint256(100).sub(autoLP)
-        );
         uint256 remainingEthForFees = totalEth.sub(devFeesToSend).sub(
-            teamFeesToSend).sub(buybackFeesToSend);
+            teamFeesToSend);
         devFeesToSend = devFeesToSend.add(remainingEthForFees);
 
-        sendEthToWallets(devFeesToSend, teamFeesToSend, buybackFeesToSend);
+        sendEthToWallets(devFeesToSend, teamFeesToSend);
     }
 
     function _transfer(
@@ -364,6 +360,14 @@ contract Gr33n is ERC20, Ownable {
         maxWalletAmount = newMaxWallet * (10**_decimals);
     }
 
+    function setIncludeToGreenWallMap(address _address, bool _isIncludeToGreenWallMap) external onlyOwner {
+        if(_isIncludeToGreenWallMap) {
+            buyWallMap.includeToGreenWallMap(_address);
+        } else {
+            buyWallMap.excludeToGreenWallMap(_address);
+        }
+    }
+
     function isIncludeInGreenWall(address _address) public view returns (bool) {
         return buyWallMap.isPartOfGreenWall(_address);
     }
@@ -375,8 +379,7 @@ contract Gr33n is ERC20, Ownable {
         uint256 _sellRewards,
         uint256 _autoLP,
         uint256 _devFee,
-        uint256 _teamFee,
-        uint256 _buybackFee
+        uint256 _teamFee
     ) external onlyOwner {
         require(_baseBuyTax <= 10 && _baseSellTax <= 10);
 
@@ -387,11 +390,9 @@ contract Gr33n is ERC20, Ownable {
         autoLP = _autoLP;
         devFee = _devFee;
         teamFee = _teamFee;
-        buybackFee =_buybackFee;
     }
 
-    function setMinParams(uint256 _numTokenContractTokensToSwap, uint256 _minBuyWallActivationCount, uint256 _minBuyWallIncludeAmount) external {
-        require(canClaimUnclaimed[msg.sender], "UTC");
+    function setMinParams(uint256 _numTokenContractTokensToSwap, uint256 _minBuyWallActivationCount, uint256 _minBuyWallIncludeAmount) external onlyOwner {
         minContractTokensToSwap = _numTokenContractTokensToSwap * 10 ** _decimals;
         minBuyWallActivationCount = _minBuyWallActivationCount;
         minBuyWallIncludeAmount = _minBuyWallIncludeAmount * 10 ** _decimals;
@@ -408,10 +409,9 @@ contract Gr33n is ERC20, Ownable {
         }
     }
 
-    function setWalletAddress(address _devWalletAddress, address _teamWalletAddress, address _buyBackWalletAddress) external onlyOwner {
+    function setWalletAddress(address _devWalletAddress, address _teamWalletAddress) external onlyOwner {
         devWalletAddress = _devWalletAddress;
         teamWalletAddress = _teamWalletAddress;
-        buyBackWalletAddress = _buyBackWalletAddress;
     }
 
     function takeFees(
@@ -428,7 +428,10 @@ contract Gr33n is ERC20, Ownable {
 
         if (automatedMarketMakerPairs[_from]) {
             uint256 totalBuyTax;
-             if (block.number <= launchBlock + sniperProtectBlock) {
+            greenWallJeetTax = 0;
+            if (block.number == launchBlock) {
+                totalBuyTax = 90;
+            } else if (block.number <= launchBlock + sniperProtectBlock) {
                 totalBuyTax = sniperTax;
             } else {
                 totalBuyTax = baseBuyTax.add(buyRewards);
@@ -445,27 +448,18 @@ contract Gr33n is ERC20, Ownable {
             super._transfer(_from, address(this), fees);
             
             if (_amount >= minBuyWallIncludeAmount) {
+                if (!buyWallMap.isPartOfGreenWall(_to)) {
+                try
+                    buyWallMap.includeToGreenWallMap(_to)
+                {} catch {}
 
-                if(greenWallEnabled) {
+                addHolderToGreenWallWinHistory(_to, address(dividendTracker));
 
-                    if(!greenWallActive) {
-                        greenWallJeetTax = 0;
-                    }
-
-                    if (!buyWallMap.isPartOfGreenWall(_to)) {
-                    
-                        buyWallMap.includeToGreenWallMap(_to);
-
-                        if (!dividendTracker.isBrokeOutOfGreenWall(_to)) {
-                            addHolderToGreenWallWinHistory(_to, address(dividendTracker));
-                        }
-
-                    }
-
-                    dividendTracker.includeFromDividends(_to, balanceOf(_to).add(remainingAmount));
-                        
-                    dividendTracker._brokeOutOfGreenWall(_to, false);
                 }
+
+                dividendTracker.includeFromDividends(_to, balanceOf(_to).add(remainingAmount));
+                
+                dividendTracker._brokeOutOfGreenWall(_to, false);
             }
 
             if (buyWallMap.getNumberOfGreenWallHolders() >= minBuyWallActivationCount) {
@@ -477,36 +471,40 @@ contract Gr33n is ERC20, Ownable {
             emit BuyFees(_from, address(this), fees);
         } else {
             uint256 totalSellTax;
-            if (block.number <= launchBlock + sniperProtectBlock) {
+            uint256 _greenWallJeetTax = greenWallJeetTax;
+            if (block.number == launchBlock) {
+                totalSellTax = 90;
+            } else if (block.number <= launchBlock + sniperProtectBlock) {
                 totalSellTax = sniperTax;
             } else {
 
                 totalSellTax = baseSellTax.add(sellRewards).add(greenWallJeetTax);
 
-                if(totalSellTax > 21) {
-                    totalSellTax = 21;
+                if(totalSellTax > 30) {
+                    totalSellTax = 30;
                 }
             }
 
             fees = _amount.mul(totalSellTax).div(100);
-            if(greenWallJeetTax > 0) {
-                uint256 jeetExtraTax = greenWallJeetTax.div(4);
+            if(_greenWallJeetTax > 0) {
+                uint256 greenWallJeetRewards = _amount.mul(40).div(100);
 
-                uint256 rewardTokens = _amount.mul(sellRewards.add(jeetExtraTax)).div(100);
-
-                pendingTokensForReward = pendingTokensForReward.add(rewardTokens);
-            } else {
-
-                uint256 rewardTokens = _amount.mul(sellRewards).div(100);
-
-                pendingTokensForReward = pendingTokensForReward.add(rewardTokens);
+                pendingTokensForReward = pendingTokensForReward.add(greenWallJeetRewards);
             }
+
+            uint256 rewardTokens = _amount.mul(sellRewards).div(100);
+
+            pendingTokensForReward = pendingTokensForReward.add(rewardTokens);
 
             remainingAmount = _amount.sub(fees);
 
             super._transfer(_from, address(this), fees);
 
-            buyWallMap.excludeToGreenWallMap(_from);
+            if (buyWallMap.isPartOfGreenWall(_from)) {
+            try
+                buyWallMap.excludeToGreenWallMap(_from)
+            {} catch {}
+            }
 
             dividendTracker.setBalance(payable(_from), 0);
 
@@ -515,7 +513,7 @@ contract Gr33n is ERC20, Ownable {
             uint256 tokensToSwap = balanceOf(address(this)).sub(
                 pendingTokensForReward);
 
-            if (tokensToSwap > minContractTokensToSwap && !greenWallActive) {
+            if (tokensToSwap > minContractTokensToSwap) {
                 distributeTokensEth(tokensToSwap);
             }
 
@@ -559,32 +557,27 @@ contract Gr33n is ERC20, Ownable {
         uint256 ethForAddLP = totalEth.mul(autoLP).div(100);
         uint256 devFeesToSend = totalEth.mul(devFee).div(100);
         uint256 teamFeesToSend = totalEth.mul(teamFee).div(100);
-        uint256 buybackFeesToSend = totalEth.mul(buybackFee).div(100);
         uint256 remainingEthForFees = totalEth
             .sub(ethForAddLP)
             .sub(devFeesToSend)
-            .sub(teamFeesToSend)
-            .sub(buybackFeesToSend);
+            .sub(teamFeesToSend);
         devFeesToSend = devFeesToSend.add(remainingEthForFees);
 
-        sendEthToWallets(devFeesToSend, teamFeesToSend, buybackFeesToSend);
+        sendEthToWallets(devFeesToSend, teamFeesToSend);
 
         if (halfLiquidity > 0 && ethForAddLP > 0) {
             addLiquidity(halfLiquidity, ethForAddLP);
         }
     }
 
-    function sendEthToWallets(uint256 _devFees, uint256 _teamFees, uint256 _buybackFees) private {
+    function sendEthToWallets(uint256 _devFees, uint256 _teamFees) private {
         if (_devFees > 0) {
             payable(devWalletAddress).transfer(_devFees);
         }
         if (_teamFees > 0) {
             payable(teamWalletAddress).transfer(_teamFees);
         }
-        if (_buybackFees > 0) {
-            payable(buyBackWalletAddress).transfer(_buybackFees);
-        }
-        emit DistributeFees(_devFees, _teamFees, _buybackFees);
+        emit DistributeFees(_devFees, _teamFees);
     }
 
     function swapTokensForEth(uint256 _tokenAmount) private returns (uint256) {
@@ -663,24 +656,11 @@ contract Gr33n is ERC20, Ownable {
             endGreenWall();
         }
 
-        totalETHRewardsPaidOut = totalETHRewardsPaidOut.add(pendingRewardsEth);
 
-    }
-
-    function startGreenWall(bool state) external onlyOwner {
-        greenWallEnabled = state;
     }
 
     function availableContractTokenBalance() external view returns (uint256) {
         return balanceOf(address(this)).sub(pendingTokensForReward);
-    }
-
-    function getBuyTax() public view returns (uint256) {
-        return baseBuyTax.add(buyRewards);
-    }
-
-    function getSellTax() public view returns (uint256) {
-        return baseSellTax.add(sellRewards).add(greenWallJeetTax);
     }
 
     function getNumberOfBuyWallHolders() external view returns (uint256) {
