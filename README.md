@@ -1,6 +1,6 @@
-# Gr33n_BUILD
+# POM_BUILD
 
-$BUILD WAS BORN OUT OF FRUSTRATION
+$PBUILD WAS BORN OUT OF FRUSTRATION
 Frustration from seeing shitcoins get hyped because a dev wrote something about the space needed a “reset” or how there’s a “resurgence” coming at the top of the contract. Whoopty f**king doo!
 
 They’d promise buybacks but go to sleep on their communities and that really pisses me off.
