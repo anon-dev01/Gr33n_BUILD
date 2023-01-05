@@ -9,7 +9,7 @@ People invest their money when they are inspired and there’s nothing worse tha
 
 What is more frustrating than ever is these devs don’t have a creative bone in their bodies. Perhaps the truth is, they are just incapable of writing unique functions and just fork the latest shit to try and make a buck at the expense of degens.
 
-Well, frustration can breed change, and that’s exactly what $BUILD attempts to do.
+Well, frustration can breed change, and that’s exactly what $PBUILD attempts to do.
 
 I’m writing in a function no one has ever seen before. A function that rewards investors who join forces to create buy walls and help send this token to new heights every day.
 
